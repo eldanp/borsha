@@ -1,0 +1,88 @@
+#install web service (tomcat)		  
+- name: tomcatServer
+  hosts: localhost
+- name: install tomcat
+  remote_user: tomcat-user
+  sudo: yes
+  ports:
+    - "8080:80"
+  roles:
+    - tomcat
+	
+	
+#deply the war
+- hosts: tomcatServer
+  vars:
+  - warName: helloworld.war
+  - warRemotePath: /opt/tomcat/webapps
+
+  tasks:
+  - name: Download WAR to server
+    command: wget http://git-internal/release.war -O /opt/tomcat/SRC/helloworld.war
+
+  - name: get current date
+    set_fact: bkpdate="{{ lookup('pipe', 'date +%Y%m%d-%H%M') }}"
+
+  - name: create directory with a date in name
+    file: path="/opt/tomcat/backup/{{ bkpdate }}"
+          state=directory
+          mode=0755
+
+  - name: Unzip WAR file
+    unarchive: src=/opt/tomcat/SRC/helloworld.war dest=/opt/tomcat/webapps/helloworld copy=no mode=0755 owner=tomcat7 group=tomcat7
+    notify:
+        - Restart tomcat7
+
+  handlers:
+    - name: Restart tomcat7
+      service: name=tomcat7 state=restarted
+		  
+  - name: wait for tomcat to start
+    wait_for: port=8080 timeout=60
+
+
+#crate DB
+ tasks:  
+- name: Create a new database with name 'helloworldCount'
+  mysql_db:
+    name: helloworldCount
+    state: present
+  - hosts: mysql   
+      - name: install mysql     
+       apt: name=mysql update_cache=yes cache_valid_time=3600 state=present
+       
+#deply the war
+- hosts: tomcatServer
+  vars:
+  - warName: helloworldCount.war
+  - warRemotePath: /opt/tomcat/webapps
+
+  tasks:
+  - name: Download WAR to server
+    command: wget http://git-internal/release.war -O /opt/tomcat/SRC/helloworldCount.war
+
+  - name: get current date
+    set_fact: bkpdate="{{ lookup('pipe', 'date +%Y%m%d-%H%M') }}"
+
+  - name: create directory with a date in name
+    file: path="/opt/tomcat/backup/{{ bkpdate }}"
+          state=directory
+          mode=0755
+
+  - name: Unzip WAR file
+    unarchive: src=/opt/tomcat/SRC/helloworldCount.war dest=/opt/tomcat/webapps/helloworldCount copy=no mode=0755 owner=tomcat7 group=tomcat7
+    notify:
+        - Restart tomcat7
+        
+  - name: update config file to connect to DB
+  ansible.builtin.replace:
+    path: /opt/tomcat/SRC/helloworldCount/conf/contact.xml
+    regexp: '^DBSTRING='
+    line: 'DBSTRING=mysql://......'
+  
+  handlers:
+    - name: Restart tomcat7
+      service: name=tomcat7 state=restarted
+		  
+  - name: wait for tomcat to start
+    wait_for: port=8080 timeout=60
